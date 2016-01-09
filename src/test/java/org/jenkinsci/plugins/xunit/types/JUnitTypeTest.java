@@ -27,8 +27,11 @@ public class JUnitTypeTest extends AbstractTest {
         convertAndValidate(JUnitInputMetric.class, "junit/testcase4/input.xml", "junit/testcase4/input.xml");
     }
 
+    /*
+     * https://issues.jenkins-ci.org/browse/JENKINS-31553
+     */
     @Test
-    public void testTestCase5() throws Exception {
-        convertAndValidate(JUnitInputMetric.class, "junit/testcase5/input.xml", "junit/testcase5/input.xml");
+    public void testSurefire219() throws Exception {
+        convertAndValidate(JUnitInputMetric.class, "junit/surefire219/input.xml", "junit/surefire219/input.xml");
     }
 }

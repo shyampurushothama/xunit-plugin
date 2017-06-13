@@ -28,6 +28,7 @@ import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Singleton;
 import hudson.FilePath;
+import hudson.Launcher;
 import hudson.Util;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
@@ -36,6 +37,7 @@ import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.remoting.VirtualChannel;
+import hudson.tasks.junit.TestDataPublisher;
 import hudson.tasks.junit.TestResult;
 import hudson.tasks.junit.TestResultAction;
 import org.apache.tools.ant.DirectoryScanner;
@@ -50,6 +52,7 @@ import org.jenkinsci.plugins.xunit.types.CustomType;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * @author Gregory Boissinot
@@ -71,12 +74,12 @@ public class XUnitProcessor implements Serializable {
         this.extraConfiguration = extraConfiguration;
     }
 
-    public boolean performXunit(boolean dryRun, AbstractBuild<?, ?> build, BuildListener listener)
+    public boolean performXunit(boolean dryRun, AbstractBuild<?, ?> build, BuildListener listener, Launcher launcher, List<TestDataPublisher> testDataPublishers)
             throws IOException, InterruptedException {
-        return performXUnit(dryRun, build, build.getWorkspace(), listener);
+        return performXUnit(dryRun, build, build.getWorkspace(), listener, launcher, testDataPublishers);
     }
 
-    public boolean performXUnit(boolean dryRun, Run<?, ?> build, FilePath workspace, TaskListener listener)
+    public boolean performXUnit(boolean dryRun, Run<?, ?> build, FilePath workspace, TaskListener listener, Launcher launcher, List<TestDataPublisher> testDataPublishers)
             throws IOException, InterruptedException {
         final XUnitLog xUnitLog = getXUnitLogObject(listener);
         try {
@@ -100,7 +103,7 @@ public class XUnitProcessor implements Serializable {
                 return true;
             }
 
-            recordTestResult(build, workspace, listener, xUnitLog);
+            recordTestResult(build, workspace, listener, launcher, testDataPublishers, xUnitLog);
             processDeletion(dryRun, workspace, xUnitLog);
             Result result = getBuildStatus(build, xUnitLog);
             if (result != null) {
@@ -275,7 +278,9 @@ public class XUnitProcessor implements Serializable {
         return getTestResultAction(previousBuild);
     }
 
-    private void recordTestResult(Run<?, ?> build, FilePath workspace, TaskListener listener, XUnitLog xUnitLog) throws XUnitException {
+    private void recordTestResult(Run<?, ?> build, FilePath workspace, TaskListener listener, Launcher launcher,
+                                  List<TestDataPublisher> testDataPublishers, XUnitLog xUnitLog)
+        throws XUnitException, InterruptedException, IOException {
         TestResultAction existingAction = build.getAction(TestResultAction.class);
         final long buildTime = build.getTimestamp().getTimeInMillis();
         final long nowMaster = System.currentTimeMillis();
@@ -293,6 +298,15 @@ public class XUnitProcessor implements Serializable {
             } else {
                 action = existingAction;
                 action.setResult(result, listener);
+            }
+
+            if (testDataPublishers != null) {
+                for (TestDataPublisher tdp : testDataPublishers) {
+                    TestResultAction.Data d = tdp.contributeTestData(build, workspace, launcher, listener, result);
+                    if (d != null) {
+                        action.addData(d);
+                    }
+                }
             }
 
             if (result.getPassCount() == 0 && result.getFailCount() == 0) {

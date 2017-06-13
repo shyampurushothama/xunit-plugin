@@ -36,6 +36,7 @@ import hudson.model.TaskListener;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
 import hudson.tasks.Builder;
+import hudson.tasks.junit.TestDataPublisher;
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.lib.dtkit.descriptor.TestTypeDescriptor;
 import org.jenkinsci.lib.dtkit.type.TestType;
@@ -46,6 +47,7 @@ import org.jenkinsci.plugins.xunit.threshold.XUnitThresholdDescriptor;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * @author Gregory Boissinot
@@ -56,23 +58,26 @@ public class XUnitBuilder extends Builder implements SimpleBuildStep {
     private XUnitThreshold[] thresholds;
     private int thresholdMode;
     private ExtraConfiguration extraConfiguration;
+    private List<TestDataPublisher> testDataPublishers;
 
     /**
      * Computed
      */
     private XUnitProcessor xUnitProcessor;
 
-    public XUnitBuilder(TestType[] types, XUnitThreshold[] thresholds) {
+    public XUnitBuilder(TestType[] types, XUnitThreshold[] thresholds, List<TestDataPublisher> testDataPublishers) {
         this.types = types;
         this.thresholds = thresholds;
         this.thresholdMode = 1;
+        this.testDataPublishers = testDataPublishers;
     }
 
     @DataBoundConstructor
-    public XUnitBuilder(TestType[] tools, XUnitThreshold[] thresholds, int thresholdMode, String testTimeMargin) {
+    public XUnitBuilder(TestType[] tools, XUnitThreshold[] thresholds, int thresholdMode, String testTimeMargin, List<TestDataPublisher> testDataPublishers) {
         this.types = tools;
         this.thresholds = thresholds;
         this.thresholdMode = thresholdMode;
+        this.testDataPublishers = testDataPublishers;
         long longTestTimeMargin = XUnitDefaultValues.TEST_REPORT_TIME_MARGING;
         if (testTimeMargin != null && testTimeMargin.trim().length() != 0) {
             longTestTimeMargin = Long.parseLong(testTimeMargin);
@@ -124,14 +129,14 @@ public class XUnitBuilder extends Builder implements SimpleBuildStep {
     public void perform(final Run<?, ?> build, FilePath workspace, Launcher launcher, final TaskListener listener)
             throws InterruptedException, IOException {
         XUnitProcessor xUnitProcessor = new XUnitProcessor(getTypes(), getThresholds(), getThresholdMode(), getExtraConfiguration());
-        xUnitProcessor.performXUnit(false, build, workspace, listener);
+        xUnitProcessor.performXUnit(false, build, workspace, listener, launcher, testDataPublishers);
     }
 
     public boolean performDryRun(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener)
             throws InterruptedException, IOException {
         try {
             XUnitProcessor xUnitProcessor = new XUnitProcessor(getTypes(), getThresholds(), getThresholdMode(), getExtraConfiguration());
-            xUnitProcessor.performXUnit(true, build, build.getWorkspace(), listener);
+            xUnitProcessor.performXUnit(true, build, build.getWorkspace(), listener, launcher, testDataPublishers);
         } catch (Throwable t) {
             listener.getLogger().println("[ERROR] - There is an error: " + t.getCause().getMessage());
         }

@@ -28,19 +28,15 @@ import hudson.DescriptorExtensionList;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
-import hudson.model.AbstractProject;
-import hudson.model.Action;
-import hudson.model.BuildListener;
-import hudson.model.Result;
-import hudson.model.Run;
-import hudson.model.TaskListener;
+import hudson.model.*;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
 import hudson.tasks.Publisher;
 import hudson.tasks.Recorder;
 import hudson.tasks.junit.JUnitResultArchiver;
+import hudson.tasks.junit.TestDataPublisher;
 import hudson.tasks.test.TestResultProjectAction;
+import hudson.util.DescribableList;
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.lib.dryrun.DryRun;
 import org.jenkinsci.lib.dtkit.descriptor.TestTypeDescriptor;
@@ -50,9 +46,13 @@ import org.jenkinsci.plugins.xunit.threshold.SkippedThreshold;
 import org.jenkinsci.plugins.xunit.threshold.XUnitThreshold;
 import org.jenkinsci.plugins.xunit.threshold.XUnitThresholdDescriptor;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 
+import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Class that converting custom reports to Junit reports and records them
@@ -66,6 +66,10 @@ public class XUnitPublisher extends Recorder implements DryRun, Serializable, Si
     private XUnitThreshold[] thresholds;
     private int thresholdMode;
     private ExtraConfiguration extraConfiguration;
+    /**
+     * for compatibility reasons, can be null.
+     */
+    private DescribableList<TestDataPublisher, Descriptor<TestDataPublisher>> testDataPublishers;
 
     public XUnitPublisher(TestType[] types, XUnitThreshold[] thresholds) {
         this.types = types;
@@ -139,14 +143,14 @@ public class XUnitPublisher extends Recorder implements DryRun, Serializable, Si
     public void perform(final Run<?, ?> build, FilePath workspace, Launcher launcher, final TaskListener listener)
             throws InterruptedException, IOException {
         XUnitProcessor xUnitProcessor = new XUnitProcessor(getTypes(), getThresholds(), getThresholdMode(), getExtraConfiguration());
-        xUnitProcessor.performXUnit(false, build, workspace, listener);
+        xUnitProcessor.performXUnit(false, build, workspace, listener, launcher, testDataPublishers);
     }
 
     public boolean performDryRun(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener)
             throws InterruptedException, IOException {
         try {
             XUnitProcessor xUnitProcessor = new XUnitProcessor(getTypes(), getThresholds(), getThresholdMode(), getExtraConfiguration());
-            xUnitProcessor.performXUnit(true, build, build.getWorkspace(), listener);
+            xUnitProcessor.performXUnit(true, build, build.getWorkspace(), listener, launcher, testDataPublishers);
         } catch (Throwable t) {
             listener.getLogger().println("[ERROR] - There is an error: " + t.getCause().getMessage());
         }
@@ -155,9 +159,21 @@ public class XUnitPublisher extends Recorder implements DryRun, Serializable, Si
         return true;
     }
 
-
     public BuildStepMonitor getRequiredMonitorService() {
         return BuildStepMonitor.NONE;
+    }
+
+    public @Nonnull List<TestDataPublisher> getTestDataPublishers() {
+        return testDataPublishers == null ? Collections.<TestDataPublisher>emptyList() : testDataPublishers;
+    }
+
+    /**
+     * @param testDataPublishers Test data publishers.
+     */
+    @DataBoundSetter
+    public final void setTestDataPublishers(@Nonnull List<TestDataPublisher> testDataPublishers) {
+        this.testDataPublishers = new DescribableList<TestDataPublisher,Descriptor<TestDataPublisher>>(Saveable.NOOP);
+        this.testDataPublishers.addAll(testDataPublishers);
     }
 
     @Extension
